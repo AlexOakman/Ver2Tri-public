@@ -1,0 +1,281 @@
+[
+  {
+    "id": "gd_066",
+    "vertica": "CREATE LOCAL TEMP TABLE stage_alias_check ON COMMIT PRESERVE ROWS AS SELECT CAST(created_at AS DATE), order_id FROM analytics_src.orders_daily;",
+    "trino": "DROP TABLE IF EXISTS stage_alias_check; CREATE TABLE stage_alias_check AS SELECT CAST(created_at AS DATE) AS created_date, order_id FROM analytics_src.orders_daily;",
+    "context_hint": "Use a named expression inside CTAS when a missing column name error points to an unnamed CAST expression.",
+    "notes": "missing column name ctas alias repair named cast expression",
+    "patterns_detected": ["missing_column_name", "ctas_alias", "cast_alias"],
+    "metadata": {"category": "runtime_fix"}
+  },
+  {
+    "id": "gd_067",
+    "vertica": "CREATE LOCAL TEMP TABLE stage_amount_fix ON COMMIT PRESERVE ROWS AS SELECT amount::numeric(18,2), order_id FROM analytics_src.order_amounts;",
+    "trino": "DROP TABLE IF EXISTS stage_amount_fix; CREATE TABLE stage_amount_fix AS SELECT CAST(amount AS DECIMAL(18,2)) AS amount_value, order_id FROM analytics_src.order_amounts;",
+    "context_hint": "Name converted numeric expressions in CTAS output.",
+    "notes": "missing column name decimal alias repair",
+    "patterns_detected": ["missing_column_name", "decimal_cast_alias"],
+    "metadata": {"category": "runtime_fix"}
+  },
+  {
+    "id": "gd_068",
+    "vertica": "SELECT order_id, amount::numeric(18,2) total_amount FROM analytics_src.orders;",
+    "trino": "SELECT order_id, CAST(amount AS DECIMAL(18,2)) AS total_amount FROM analytics_src.orders;",
+    "context_hint": "Alias converted expressions explicitly.",
+    "notes": "expression alias projection naming",
+    "patterns_detected": ["projection_alias", "cast_normalization"],
+    "metadata": {"category": "casting"}
+  },
+  {
+    "id": "gd_069",
+    "vertica": "CREATE LOCAL TEMP TABLE stage_event_day ON COMMIT PRESERVE ROWS AS SELECT event_time::date, user_id FROM analytics_src.user_events;",
+    "trino": "DROP TABLE IF EXISTS stage_event_day; CREATE TABLE stage_event_day AS SELECT CAST(event_time AS DATE) AS event_day, user_id FROM analytics_src.user_events;",
+    "context_hint": "Use a semantic alias when converting timestamp-to-date expressions.",
+    "notes": "missing column name event day alias",
+    "patterns_detected": ["missing_column_name", "timestamp_to_date_alias"],
+    "metadata": {"category": "runtime_fix"}
+  },
+  {
+    "id": "gd_070",
+    "vertica": "SELECT user_id, revenue / 100 AS revenue_major FROM analytics_src.user_revenue;",
+    "trino": "SELECT user_id, CAST(revenue AS DECIMAL(18,2)) / 100 AS revenue_major FROM analytics_src.user_revenue;",
+    "context_hint": "Preserve named derived expressions.",
+    "notes": "derived metric alias preserved",
+    "patterns_detected": ["derived_metric", "alias_preserved"],
+    "metadata": {"category": "casting"}
+  },
+  {
+    "id": "gd_071",
+    "vertica": "SELECT user_id, CASE WHEN status_id IN (1,2,3) THEN 1 ELSE 0 END AS is_active, is_active * weight AS weighted_active FROM analytics_src.user_status_daily;",
+    "trino": "SELECT q.user_id, q.is_active, q.is_active * q.weight AS weighted_active FROM (SELECT user_id, CASE WHEN status_id IN (1,2,3) THEN 1 ELSE 0 END AS is_active, weight FROM analytics_src.user_status_daily) q;",
+    "context_hint": "If a same SELECT alias is reused inside another expression, materialize it in a subquery.",
+    "notes": "same select alias reuse derived column subquery",
+    "patterns_detected": ["same_select_alias_reuse", "derived_column_subquery"],
+    "metadata": {"category": "runtime_fix"}
+  },
+  {
+    "id": "gd_072",
+    "vertica": "SELECT order_id, seller_id || '_' || campaign_id AS seller_campaign_key, seller_campaign_key || '_v2' AS extended_key FROM analytics_src.orders;",
+    "trino": "SELECT q.order_id, q.seller_campaign_key, q.seller_campaign_key || '_v2' AS extended_key FROM (SELECT order_id, CAST(seller_id AS VARCHAR) || '_' || CAST(campaign_id AS VARCHAR) AS seller_campaign_key FROM analytics_src.orders) q;",
+    "context_hint": "Avoid alias reuse in the same SELECT by using an inner query.",
+    "notes": "same select alias reuse string key derived column",
+    "patterns_detected": ["same_select_alias_reuse", "subquery_materialization"],
+    "metadata": {"category": "runtime_fix"}
+  },
+  {
+    "id": "gd_073",
+    "vertica": "CREATE LOCAL TEMP TABLE stage_ratio_fix ON COMMIT PRESERVE ROWS AS SELECT amount / quantity, item_id FROM analytics_src.order_items;",
+    "trino": "DROP TABLE IF EXISTS stage_ratio_fix; CREATE TABLE stage_ratio_fix AS SELECT amount / NULLIF(quantity, 0) AS unit_amount, item_id FROM analytics_src.order_items;",
+    "context_hint": "Missing column name in CTAS can be fixed by aliasing a derived expression.",
+    "notes": "missing column name ctas alias derived ratio",
+    "patterns_detected": ["missing_column_name", "derived_alias"],
+    "metadata": {"category": "runtime_fix"}
+  },
+  {
+    "id": "gd_074",
+    "vertica": "SELECT account_id, ZEROIFNULL(balance) FROM analytics_src.account_balance;",
+    "trino": "SELECT account_id, COALESCE(balance, 0) AS balance_safe FROM analytics_src.account_balance;",
+    "context_hint": "Replace Vertica-specific null helpers and keep explicit aliases.",
+    "notes": "null helper alias normalization",
+    "patterns_detected": ["zeroifnull", "alias_preserved"],
+    "metadata": {"category": "functions"}
+  },
+  {
+    "id": "gd_075",
+    "vertica": "SELECT user_id, event_time::date AS event_day FROM analytics_src.user_events WHERE event_day >= :first_date::date;",
+    "trino": "SELECT q.user_id, q.event_day FROM (SELECT user_id, CAST(event_time AS DATE) AS event_day FROM analytics_src.user_events) q WHERE q.event_day >= CAST(:first_date AS DATE);",
+    "context_hint": "Move alias-dependent filters into an outer query.",
+    "notes": "alias scope outer query date filter",
+    "patterns_detected": ["alias_scope_fix", "outer_query_filter"],
+    "metadata": {"category": "subqueries"}
+  },
+  {
+    "id": "gd_076",
+    "vertica": "SELECT order_id, DECODE(status_code, 1, 'new', 2, 'done', 'other') FROM analytics_src.orders;",
+    "trino": "SELECT order_id, CASE WHEN status_code = 1 THEN 'new' WHEN status_code = 2 THEN 'done' ELSE 'other' END AS status_label FROM analytics_src.orders;",
+    "context_hint": "Translate DECODE into CASE with an explicit alias.",
+    "notes": "decode case alias normalization",
+    "patterns_detected": ["decode_to_case", "alias_preserved"],
+    "metadata": {"category": "functions"}
+  },
+  {
+    "id": "gd_077",
+    "vertica": "SELECT item_id, amount::numeric(20,2), amount::numeric(20,2) * vat_rate AS amount_with_vat FROM analytics_src.items;",
+    "trino": "SELECT q.item_id, q.amount_value, q.amount_value * q.vat_rate AS amount_with_vat FROM (SELECT item_id, CAST(amount AS DECIMAL(20,2)) AS amount_value, vat_rate FROM analytics_src.items) q;",
+    "context_hint": "Materialize a reused cast expression in an inner query.",
+    "notes": "same select alias reuse numeric cast",
+    "patterns_detected": ["same_select_alias_reuse", "cast_materialization"],
+    "metadata": {"category": "runtime_fix"}
+  },
+  {
+    "id": "gd_078",
+    "vertica": "TRUNCATE TABLE target_schema.daily_snapshot; INSERT INTO target_schema.daily_snapshot SELECT * FROM stage_snapshot;",
+    "trino": "DROP TABLE IF EXISTS target_schema.daily_snapshot_trino; CREATE TABLE target_schema.daily_snapshot_trino AS SELECT * FROM stage_snapshot;",
+    "context_hint": "For an unpartitioned refresh, recreate the target with CTAS instead of truncate plus insert.",
+    "notes": "unpartitioned overwrite recreate truncate ctas reload",
+    "patterns_detected": ["unpartitioned_refresh", "ctas_recreate"],
+    "metadata": {"category": "refresh"}
+  },
+  {
+    "id": "gd_079",
+    "vertica": "DELETE FROM target_schema.session_rollup WHERE event_date >= :first_date::date; INSERT INTO target_schema.session_rollup SELECT * FROM stage_rollup;",
+    "trino": "CREATE OR REPLACE TABLE target_schema.session_rollup_trino AS SELECT * FROM stage_rollup;",
+    "context_hint": "Use full-table rebuild only for an unpartitioned refresh target.",
+    "notes": "unpartitioned refresh rebuild create or replace",
+    "patterns_detected": ["unpartitioned_refresh", "rebuild_target"],
+    "metadata": {"category": "refresh"}
+  },
+  {
+    "id": "gd_080",
+    "vertica": "CREATE LOCAL TEMP TABLE stage_summary ON COMMIT PRESERVE ROWS AS SELECT user_id, COUNT(*) AS cnt FROM analytics_src.user_events GROUP BY 1;",
+    "trino": "DROP TABLE IF EXISTS stage_summary; CREATE TABLE stage_summary AS SELECT user_id, COUNT(*) AS cnt FROM analytics_src.user_events GROUP BY 1;",
+    "context_hint": "Temp-table CTAS becomes DROP TABLE IF EXISTS plus CREATE TABLE AS.",
+    "notes": "temp table ctas normalization",
+    "patterns_detected": ["temp_table_to_table"],
+    "metadata": {"category": "temp_tables"}
+  },
+  {
+    "id": "gd_081",
+    "vertica": "SELECT event_date FROM analytics_src.sales_events WHERE event_date::date >= '2024-01-01'::date AND event_date::date < :last_date::date;",
+    "trino": "SELECT event_date FROM analytics_src.sales_events WHERE CAST(event_date AS DATE) >= DATE '2024-01-01' AND CAST(event_date AS DATE) < CAST(:last_date AS DATE);",
+    "context_hint": "Use typed DATE literals and cast colon parameters explicitly.",
+    "notes": "typed date literal casted parameter",
+    "patterns_detected": ["typed_date_literal", "casted_parameter"],
+    "metadata": {"category": "functions_date"}
+  },
+  {
+    "id": "gd_082",
+    "vertica": "SELECT user_id, event_time, ROW_NUMBER() OVER(PARTITION BY user_id ORDER BY event_time DESC) AS rn FROM analytics_src.user_events QUALIFY rn = 1;",
+    "trino": "SELECT q.user_id, q.event_time, q.rn FROM (SELECT user_id, event_time, ROW_NUMBER() OVER(PARTITION BY user_id ORDER BY event_time DESC) AS rn FROM analytics_src.user_events) q WHERE q.rn = 1;",
+    "context_hint": "QUALIFY must be rewritten through a subquery or CTE.",
+    "notes": "qualify to subquery window filter",
+    "patterns_detected": ["qualify_to_subquery"],
+    "metadata": {"category": "subqueries"}
+  },
+  {
+    "id": "gd_084",
+    "vertica": "INSERT INTO target_schema.sales_snapshot SELECT :launch_id AS launch_id, :version_id AS version_id, event_date::date AS event_date, amount FROM analytics_src.sales_snapshot_src GROUP BY 1,2,3,4 ORDER BY 4;",
+    "trino": "INSERT INTO target_schema.sales_snapshot_trino SELECT CAST(:launch_id AS BIGINT) AS launch_id, CAST(event_date AS DATE) AS event_date, amount FROM analytics_src.sales_snapshot_src GROUP BY 1,2,3 ORDER BY 3;",
+    "context_hint": "If version_id is removed, renumber positional GROUP BY and ORDER BY references that followed it.",
+    "notes": "launch_id version_id group by 3 order by 4 renumber",
+    "patterns_detected": ["version_id_removal", "ordinal_renumber"],
+    "metadata": {"category": "table_operations"}
+  },
+  {
+    "id": "gd_088",
+    "vertica": "INSERT INTO target_schema.metric_rollup SELECT :launch_id AS launch_id, :version_id AS version_id, seller_id, SUM(amount) AS total_amount FROM analytics_src.metric_rollup_src GROUP BY 1,2,3;",
+    "trino": "INSERT INTO target_schema.metric_rollup_trino SELECT CAST(:launch_id AS BIGINT) AS launch_id, seller_id, SUM(amount) AS total_amount FROM analytics_src.metric_rollup_src GROUP BY 1,2;",
+    "context_hint": "After version_id removal, keep launch_id and renumber grouped ordinals.",
+    "notes": "launch_id version_id group by renumber aggregate",
+    "patterns_detected": ["version_id_removal", "ordinal_renumber"],
+    "metadata": {"category": "table_operations"}
+  },
+  {
+    "id": "gd_112",
+    "vertica": "INSERT INTO target_schema.user_daily_metrics SELECT :launch_id AS launch_id, :version_id AS version_id, user_id, event_time::date AS event_date, amount::numeric(18,2) AS amount FROM analytics_src.user_daily_metrics_src GROUP BY 1,2,3,4,5;",
+    "trino": "INSERT INTO target_schema.user_daily_metrics_trino SELECT CAST(:launch_id AS BIGINT) AS launch_id, user_id, CAST(event_time AS DATE) AS event_date, CAST(amount AS DECIMAL(18,2)) AS amount FROM analytics_src.user_daily_metrics_src GROUP BY 1,2,3,4;",
+    "context_hint": "Preserve launch_id, drop version_id, and renumber positional groupings.",
+    "notes": "launch_id version_id group by renumber public metrics",
+    "patterns_detected": ["version_id_removal", "cast_normalization", "ordinal_renumber"],
+    "metadata": {"category": "runtime_fix"}
+  },
+  {
+    "id": "gd_113",
+    "vertica": "INSERT INTO target_schema.user_daily_metrics SELECT :launch_id AS launch_id, :version_id AS version_id, user_id, event_time::date AS event_date, amount::numeric(18,2) AS amount FROM analytics_src.user_daily_metrics_src ORDER BY 1,2,3,4,5;",
+    "trino": "INSERT INTO target_schema.user_daily_metrics_trino SELECT CAST(:launch_id AS BIGINT) AS launch_id, user_id, CAST(event_time AS DATE) AS event_date, CAST(amount AS DECIMAL(18,2)) AS amount FROM analytics_src.user_daily_metrics_src ORDER BY 1,2,3,4;",
+    "context_hint": "Renumber positional ORDER BY after technical column removal.",
+    "notes": "launch_id version_id order by renumber",
+    "patterns_detected": ["version_id_removal", "ordinal_renumber"],
+    "metadata": {"category": "runtime_fix"}
+  },
+  {
+    "id": "gd_114",
+    "vertica": "DELETE FROM target_schema.partitioned_metrics WHERE event_date BETWEEN :first_date::date AND :last_date::date; INSERT INTO target_schema.partitioned_metrics SELECT * FROM stage_partitioned_metrics;",
+    "trino": "SET SESSION target_catalog.insert_mode = 'OVERWRITE'; INSERT INTO target_schema.partitioned_metrics_trino SELECT * FROM stage_partitioned_metrics WHERE event_date BETWEEN CAST(:first_date AS DATE) AND CAST(:last_date AS DATE);",
+    "context_hint": "For partitioned reloads, keep the write bounded by the partition column and use an optional generic overwrite session command.",
+    "notes": "partition overwrite reload bounded insert",
+    "patterns_detected": ["partition_overwrite", "bounded_insert"],
+    "metadata": {"category": "refresh"}
+  },
+  {
+    "id": "gd_115",
+    "vertica": "INSERT INTO target_schema.order_revenue_day SELECT :launch_id AS launch_id, :version_id AS version_id, order_id, revenue_date::date AS revenue_date, amount::numeric(18,2) AS amount FROM analytics_src.order_revenue_day_src GROUP BY 1,2,3,4,5;",
+    "trino": "INSERT INTO target_schema.order_revenue_day_trino SELECT CAST(:launch_id AS BIGINT) AS launch_id, order_id, CAST(revenue_date AS DATE) AS revenue_date, CAST(amount AS DECIMAL(18,2)) AS amount FROM analytics_src.order_revenue_day_src GROUP BY 1,2,3,4;",
+    "context_hint": "Drop version_id and renumber grouping ordinals after technical column removal.",
+    "notes": "launch_id version_id group by 3 order by 4 renumber revenue",
+    "patterns_detected": ["version_id_removal", "ordinal_renumber"],
+    "metadata": {"category": "runtime_fix"}
+  },
+  {
+    "id": "gd_116",
+    "vertica": "TRUNCATE TABLE target_schema.snapshot_users; INSERT INTO target_schema.snapshot_users SELECT user_id, event_date::date AS event_date, status FROM analytics_src.snapshot_users_src;",
+    "trino": "DROP TABLE IF EXISTS target_schema.snapshot_users_trino; CREATE TABLE target_schema.snapshot_users_trino AS SELECT user_id, CAST(event_date AS DATE) AS event_date, status FROM analytics_src.snapshot_users_src;",
+    "context_hint": "For an unpartitioned target, replace truncate-plus-insert with CTAS rebuild.",
+    "notes": "unpartitioned refresh truncate create table as",
+    "patterns_detected": ["unpartitioned_refresh", "ctas_recreate"],
+    "metadata": {"category": "refresh"}
+  },
+  {
+    "id": "gd_117",
+    "vertica": "INSERT INTO target_schema.funnel_month SELECT :launch_id AS launch_id, :version_id AS version_id, DATE_TRUNC('month', event_date)::date AS event_month, COUNT(DISTINCT user_id) AS users_cnt FROM analytics_src.funnel_events GROUP BY 1,2,3;",
+    "trino": "INSERT INTO target_schema.funnel_month_trino SELECT CAST(:launch_id AS BIGINT) AS launch_id, CAST(DATE_TRUNC('month', event_date) AS DATE) AS event_month, COUNT(DISTINCT user_id) AS users_cnt FROM analytics_src.funnel_events GROUP BY 1,2;",
+    "context_hint": "When dropping version_id, renumber groupings and preserve launch_id.",
+    "notes": "launch_id version_id renumber monthly funnel",
+    "patterns_detected": ["version_id_removal", "ordinal_renumber"],
+    "metadata": {"category": "runtime_fix"}
+  },
+  {
+    "id": "gd_118",
+    "vertica": "DELETE FROM target_schema.payment_day WHERE payment_date BETWEEN :first_date::date AND :last_date::date; INSERT INTO target_schema.payment_day SELECT payment_id, payment_date::date AS payment_date, status FROM analytics_src.payment_day_src;",
+    "trino": "SET SESSION target_catalog.insert_mode = 'OVERWRITE'; INSERT INTO target_schema.payment_day_trino SELECT payment_id, CAST(payment_date AS DATE) AS payment_date, status FROM analytics_src.payment_day_src WHERE CAST(payment_date AS DATE) BETWEEN CAST(:first_date AS DATE) AND CAST(:last_date AS DATE);",
+    "context_hint": "Incremental reloads should use overwrite semantics only for the affected partition window.",
+    "notes": "delete truncate overwrite ctas partition reload incremental",
+    "patterns_detected": ["partition_overwrite", "bounded_insert"],
+    "metadata": {"category": "refresh"}
+  },
+  {
+    "id": "gd_119",
+    "vertica": "TRUNCATE TABLE target_schema.installment_funnel; INSERT INTO target_schema.installment_funnel SELECT * FROM stage_installment_funnel;",
+    "trino": "DROP TABLE IF EXISTS target_schema.installment_funnel_trino; CREATE TABLE target_schema.installment_funnel_trino AS SELECT * FROM stage_installment_funnel;",
+    "context_hint": "Unpartitioned refresh targets are best rebuilt with CTAS.",
+    "notes": "unpartitioned overwrite recreate truncate ctas",
+    "patterns_detected": ["unpartitioned_refresh", "ctas_recreate"],
+    "metadata": {"category": "refresh"}
+  },
+  {
+    "id": "gd_120",
+    "vertica": "DELETE FROM target_schema.call_history WHERE updated_at::date >= DATE(:first_date) AND updated_at::date <= DATE(:last_date); INSERT INTO target_schema.call_history SELECT :launch_id AS launch_id, * FROM stage_call_history;",
+    "trino": "SET SESSION target_catalog.insert_mode = 'OVERWRITE'; INSERT INTO target_schema.call_history_trino SELECT CAST(:launch_id AS BIGINT) AS launch_id, * FROM stage_call_history WHERE updated_at_date BETWEEN CAST(:first_date AS DATE) AND CAST(:last_date AS DATE);",
+    "context_hint": "Keep overwrite inserts bounded by the partitioning date column.",
+    "notes": "delete overwrite partition reload bounded call history",
+    "patterns_detected": ["partition_overwrite", "bounded_insert", "launch_id_preserved"],
+    "metadata": {"category": "refresh"}
+  },
+  {
+    "id": "gd_121",
+    "vertica": "TRUNCATE TABLE target_schema.daily_orders; INSERT INTO target_schema.daily_orders SELECT * FROM stage_daily_orders;",
+    "trino": "CREATE OR REPLACE TABLE target_schema.daily_orders_trino AS SELECT * FROM stage_daily_orders;",
+    "context_hint": "Recreate a non-partitioned target instead of using truncate.",
+    "notes": "unpartitioned overwrite recreate truncate ctas reload",
+    "patterns_detected": ["unpartitioned_refresh", "recreate_target"],
+    "metadata": {"category": "refresh"}
+  },
+  {
+    "id": "gd_122",
+    "vertica": "DELETE FROM target_schema.user_orders_day WHERE event_date BETWEEN :first_date::date AND :last_date::date; INSERT INTO target_schema.user_orders_day SELECT user_id, event_date::date AS event_date, orders_cnt FROM analytics_src.user_orders_day_src;",
+    "trino": "SET SESSION target_catalog.insert_mode = 'OVERWRITE'; INSERT INTO target_schema.user_orders_day_trino SELECT user_id, CAST(event_date AS DATE) AS event_date, orders_cnt FROM analytics_src.user_orders_day_src WHERE CAST(event_date AS DATE) BETWEEN CAST(:first_date AS DATE) AND CAST(:last_date AS DATE);",
+    "context_hint": "Use partition-bounded overwrite for incremental reloads.",
+    "notes": "delete overwrite partition reload user orders",
+    "patterns_detected": ["partition_overwrite", "bounded_insert"],
+    "metadata": {"category": "refresh"}
+  },
+  {
+    "id": "gd_123",
+    "vertica": "DELETE FROM target_schema.monthly_rollup WHERE month_start BETWEEN :first_date::date AND :last_date::date; INSERT INTO target_schema.monthly_rollup SELECT month_start::date AS month_start, revenue FROM analytics_src.monthly_rollup_src;",
+    "trino": "SET SESSION target_catalog.insert_mode = 'OVERWRITE'; INSERT INTO target_schema.monthly_rollup_trino SELECT CAST(month_start AS DATE) AS month_start, revenue FROM analytics_src.monthly_rollup_src WHERE CAST(month_start AS DATE) BETWEEN CAST(:first_date AS DATE) AND CAST(:last_date AS DATE);",
+    "context_hint": "Bound overwrite refreshes by the partition column instead of issuing delete statements.",
+    "notes": "delete truncate overwrite partition reload monthly",
+    "patterns_detected": ["partition_overwrite", "bounded_insert"],
+    "metadata": {"category": "refresh"}
+  }
+]

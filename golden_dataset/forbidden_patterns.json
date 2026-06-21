@@ -1,0 +1,347 @@
+{
+  "version": "1.0",
+  "last_updated": "2026-04-05",
+  "patterns": [
+    {
+      "id": "v_monitor",
+      "pattern": "V_MONITOR",
+      "type": "substring",
+      "description": "Vertica system table",
+      "severity": "error",
+      "fix_hint": "Replace with information_schema or system table equivalent in Trino"
+    },
+    {
+      "id": "segmented_by",
+      "pattern": "SEGMENTED\\s+BY",
+      "type": "regex",
+      "description": "Vertica segmentation clause",
+      "severity": "error",
+      "fix_hint": "Remove SEGMENTED BY clause - Trino does not support this storage specification"
+    },
+    {
+      "id": "with_data_clause",
+      "pattern": "\\bWITH\\s+DATA\\b",
+      "type": "regex",
+      "description": "WITH DATA clause at the end of CTAS or table creation statements - not supported in Trino",
+      "severity": "error",
+      "fix_hint": "Remove the WITH DATA clause. In Trino, CTAS statements automatically populate data; no explicit WITH DATA keyword is needed."
+    },
+    {
+      "id": "using_join_syntax",
+      "pattern": "\\bUSING\\s*\\([^)]*\\)",
+      "type": "regex",
+      "description": "USING clause in JOIN constructions - not supported in Trino; use explicit ON clause with column equality",
+      "severity": "error",
+      "fix_hint": "Replace USING(column_list) with explicit ON clause, e.g., 'ON t1.column = t2.column'. Ensure all columns from USING are converted to explicit equality conditions."
+    },
+    {
+     "id": "percentile_disc",
+     "pattern": "\\bPERCENTILE_DISC\\s*\\(",
+     "type": "regex",
+     "description": "Vertica PERCENTILE_DISC (exact percentile) – not directly available in Trino",
+     "severity": "error",
+     "fix_hint": "Replace PERCENTILE_DISC with a subquery using row_number() and ceil/floor as shown in the migration guide (see example in Сравнение синтаксиса)."
+    },
+    {
+      "id": "temp_table",
+      "pattern": "CREATE\\s+(?:LOCAL\\s+)?(?:GLOBAL\\s+)?TEMP(?:ORARY)?\\s+TABLE",
+      "type": "regex",
+      "description": "Vertica temporary table creation",
+      "severity": "error",
+      "fix_hint": "Remove TEMP/TEMPORARY keywords to create a regular table. Do not specify a schema — the table will be created in the default schema. Keep the table name exactly as in the original Vertica code; optionally you may add a prefix (e.g., tmp_) for clarity, but the name itself must remain unchanged."
+    },
+    {
+      "id": "temporary_flag_true",
+      "pattern": "(?i)temporary\\s*=\\s*true",
+      "type": "regex",
+      "description": "Detects usage of 'temporary = true' flag which creates temporary/transient tables instead of persistent ones",
+      "severity": "error",
+      "fix_hint": "Remove 'temporary = true' parameter to create a regular persistent table. Use standard 'CREATE TABLE table_name AS ...' syntax without temporary flags. Keep the table name exactly as in the original code; optionally you may add a prefix (e.g., tmp_) for clarity, but the name itself must remain unchanged."
+    },
+    {
+      "id": "vertica_table_properties",
+      "pattern": "(?i)\\b(?:appendonly\\s*=\\s*(?:true|false)|orientation\\s*=\\s*(?:row|column))\\b",
+      "type": "regex",
+      "description": "Vertica storage table properties are not supported in Trino",
+      "severity": "error",
+      "fix_hint": "Remove Vertica-only table properties such as appendonly and orientation from the WITH clause. Keep only Trino-supported table properties."
+    },
+    {
+      "id": "parquet_format_property",
+      "pattern": "(?i)\\bformat\\s*=\\s*'parquet'\\b",
+      "type": "regex",
+      "description": "Explicit WITH (format='PARQUET') table property detected",
+      "severity": "error",
+      "fix_hint": "Remove the explicit format='PARQUET' table property from CTAS/CREATE TABLE statements unless the target Trino environment explicitly requires it. Keep only validated Trino-supported table properties."
+    },
+    {
+      "id": "temp_schema_reference",
+      "pattern": "\\bv_temp_schema\\.\\w+\\b",
+      "type": "regex",
+      "description": "Reference to a table in the v_temp_schema schema, which is a Vertica temporary schema not available in Trino",
+      "severity": "error",
+      "fix_hint": "Remove the 'v_temp_schema.' prefix and refer to the table directly by its name only. The table will be created in the default schema; optionally you may add a prefix (e.g., tmp_) for clarity, but the name itself must remain unchanged."
+    }, 
+    {
+      "id": "last_day_function",
+      "pattern": "\\bLAST_DAY\\s*\\([^)]+\\)",
+      "type": "regex",
+      "description": "LAST_DAY function is not supported in Trino; it is used in Vertica to get the last day of the month",
+      "severity": "error",
+      "fix_hint": "Replace LAST_DAY(column) with a subquery that returns the maximum date for the same table and column, e.g., (SELECT MAX(event_date) FROM table AS alias). "
+    },
+    {
+    "id": "boolean_is_syntax",
+    "pattern": "\\bIS\\s+(NOT\\s+)?(FALSE|TRUE)\\b",
+    "type": "regex",
+    "description": "Use of IS FALSE/TRUE or IS NOT FALSE/TRUE for boolean checks, which is not supported in Trino; Trino uses comparison operators =, <> with boolean literals",
+    "severity": "error",
+    "fix_hint": "Replace 'IS FALSE' with '= FALSE', 'IS TRUE' with '= TRUE', 'IS NOT FALSE' with '<> FALSE', 'IS NOT TRUE' with '<> TRUE'. Ensure the boolean expression is compared directly."
+    },
+    {
+      "id": "export_to",
+      "pattern": "EXPORT\\s+TO",
+      "type": "regex",
+      "description": "Vertica export",
+      "severity": "error",
+      "fix_hint": "Remove EXPORT statement - use standard SQL operations"
+    },
+    {
+      "id": "timeseries",
+      "pattern": "\\bTIMESERIES\\s+\\w+\\s+AS\\s+'",
+      "type": "regex",
+      "description": "Vertica time series",
+      "severity": "error",
+      "fix_hint": "Replace with window functions or date sequence generation"
+    },
+    {
+      "id": "interpolate",
+      "pattern": "\\bINTERPOLATE\\s+(?:PREVIOUS|NEXT)\\s+VALUE",
+      "type": "regex",
+      "description": "Vertica interpolate join (use range join in Trino)",
+      "severity": "error",
+      "fix_hint": "Replace INTERPOLATE join with range join using LEAD() window function"
+    },
+    {
+      "id": "optimizer_hint",
+      "pattern": "/\\*\\+[^*]*\\*+(?:[^/*][^*]*\\*+)*/",
+      "type": "regex",
+      "description": "Vertica optimizer hint /*+ ... */",
+      "severity": "error",
+      "fix_hint": "Remove optimizer hints - Trino does not support /*+ ... */ syntax"
+    },
+    {
+      "id": "cast_operator",
+      "pattern": "::\\s*(?:varchar|int|integer|bigint|numeric|decimal|date|float|boolean|timestamp|time|interval)",
+      "type": "regex",
+      "description": "Vertica cast operator :: (use CAST() in Trino)",
+      "severity": "error",
+      "fix_hint": "Replace expression::type with CAST(expression AS type)"
+    },
+    {
+        "id": "unwrapped_date_literal",
+        "pattern": "(?<!DATE\\s)(?<!TIMESTAMP\\s)'\\d{4}-\\d{2}-\\d{2}'(?!\\s*AS\\s+(?:DATE|TIMESTAMP)\\s*\\))",
+        "type": "regex",
+        "description": "Date literal as a plain string in a comparison or expression; Trino does not implicitly convert strings to dates, leading to unexpected numeric comparisons",
+        "severity": "error",
+        "fix_hint": "Wrap the date string in the DATE() function, e.g., DATE('2026-01-01'), to explicitly convert it to a date type. Ensure this is done wherever the literal is used in date comparisons, arithmetic, or function arguments."
+    },
+    {
+      "id": "uncasted_parameter",
+      "pattern": "(?<![:\\w']):[A-Za-z_][A-Za-z0-9_]*\\b(?!\\s+AS\\s+(?:date|bigint|integer|double|decimal(?:\\([^)]*\\))?|varchar(?:\\([^)]*\\))?|timestamp(?:\\([^)]*\\))?|boolean)\\s*\\))",
+      "type": "regex",
+      "description": "Colon-prefixed parameter used without explicit CAST; parameters like :date or :launch must always be cast to the target type in Trino",
+      "severity": "error",
+      "fix_hint": "Wrap the parameter in a CAST function with the appropriate target type. For dates use CAST(:variable AS date), for integers use CAST(:variable AS bigint), for decimals use CAST(:variable AS decimal), etc. Ensure the type matches the context."
+    },
+    {
+        "id": "vertica_interval_syntax",
+        "pattern": "\\s-\\s*intervalym\\s*'\\d+\\s*(month|year|day)'",
+        "type": "regex",
+        "description": "Vertica-specific interval syntax using 'intervalym' keyword detected. Trino requires standard INTERVAL syntax with explicit unit specification.",
+        "severity": "error",
+        "fix_hint": "Replace 'intervalym' with 'INTERVAL' and reformat to Trino syntax. Example: Change 'maxdate - intervalym '2 month'' to 'maxdate - INTERVAL '2' month'. Ensure interval units are quoted and placed after the numeric value."
+    },
+    {
+      "id": "invalid_trino_interval_literal",
+      "pattern": "\\bINTERVAL\\s*'\\d+\\s+(?:DAY|MONTH|YEAR|HOUR|MINUTE|SECOND)'",
+      "type": "regex",
+      "description": "Invalid Trino interval literal where the value and unit are placed inside the same quoted string",
+      "severity": "error",
+      "fix_hint": "Rewrite interval literals to valid Trino syntax: use INTERVAL '1' DAY instead of INTERVAL '1 DAY'."
+    },
+    {
+      "id": "decode_function",
+      "pattern": "DECODE\\s*\\(",
+      "type": "regex",
+      "description": "Vertica DECODE function (use CASE in Trino)",
+      "severity": "error",
+      "fix_hint": "Replace DECODE(expr, val1, result1, ..., default) with CASE expression"
+    },
+    {
+      "id": "zeroifnull",
+      "pattern": "ZEROIFNULL\\s*\\(",
+      "type": "regex",
+      "description": "Vertica ZEROIFNULL (use COALESCE in Trino)",
+      "severity": "error",
+      "fix_hint": "Replace ZEROIFNULL(expr) with COALESCE(expr, 0)"
+    },
+    {
+      "id": "nullifzero",
+      "pattern": "NULLIFZERO\\s*\\(",
+      "type": "regex",
+      "description": "Vertica NULLIFZERO (use CASE WHEN in Trino)",
+      "severity": "error",
+      "fix_hint": "Replace NULLIFZERO(expr) with NULLIF(expr, 0) or CASE WHEN expr = 0 THEN NULL ELSE expr END"
+    },
+    {
+      "id": "isutf8",
+      "pattern": "ISUTF8\\s*\\(",
+      "type": "regex",
+      "description": "Vertica ISUTF8 (use regex in Trino)",
+      "severity": "error",
+      "fix_hint": "Replace with regex pattern matching for UTF-8 validation"
+    },
+    {
+      "id": "explode",
+      "pattern": "EXPLODE\\s*\\(",
+      "type": "regex",
+      "description": "Vertica EXPLODE (use UNNEST in Trino)",
+      "severity": "error",
+      "fix_hint": "Replace EXPLODE(array) with UNNEST(array) AS t(alias)"
+    },
+    {
+      "id": "implode",
+      "pattern": "IMPLODE\\s*\\(",
+      "type": "regex",
+      "description": "Vertica IMPLODE (use ARRAY_AGG in Trino)",
+      "severity": "error",
+      "fix_hint": "Replace IMPLODE(...) with ARRAY_AGG(...)"
+    },
+    {
+      "id": "approximate_median",
+      "pattern": "\\bAPPROXIMATE_MEDIAN\\s*\\(",
+      "type": "regex",
+      "description": "Vertica APPROXIMATE_MEDIAN (use APPROX_PERCENTILE in Trino)",
+      "severity": "error",
+      "fix_hint": "Replace APPROXIMATE_MEDIAN(column) with APPROX_PERCENTILE(column, 0.5)"
+    },
+    {
+      "id": "approximate_percentile",
+      "pattern": "APPROXIMATE_PERCENTILE",
+      "type": "substring",
+      "description": "Vertica APPROXIMATE_PERCENTILE",
+      "severity": "error",
+      "fix_hint": "Replace with APPROX_PERCENTILE(column, percentile_value)"
+    },
+    {
+      "id": "transpose",
+      "pattern": "TRANSPOSE\\s*\\(",
+      "type": "regex",
+      "description": "Vertica TRANSPOSE (use UNNEST with arrays in Trino)",
+      "severity": "error",
+      "fix_hint": "Replace with UNNEST of ARRAY[column_names] and ARRAY[column_values]"
+    },
+    {
+      "id": "conditional_change_event",
+      "pattern": "CONDITIONAL_CHANGE_EVENT",
+      "type": "substring",
+      "description": "Vertica CONDITIONAL_CHANGE_EVENT",
+      "severity": "error",
+      "fix_hint": "Replace with combination of LAG and SUM window functions"
+    },
+    {
+      "id": "ilike",
+      "pattern": "ILIKE",
+      "type": "substring",
+      "description": "Vertica ILIKE (use LOWER() + LIKE in Trino)",
+      "severity": "error",
+      "fix_hint": "Replace column ILIKE 'pattern' with LOWER(column) LIKE LOWER('pattern')"
+    },
+    {
+      "id": "timestampdiff",
+      "pattern": "(?i)TIMESTAMPDIFF\\s*\\(",
+      "type": "regex",
+      "description": "Vertica TIMESTAMPDIFF (use DATE_DIFF in Trino)",
+      "severity": "error",
+      "fix_hint": "Replace TIMESTAMPDIFF(unit, start, end) with DATE_DIFF(unit, start, end)"
+    },
+    {
+      "id": "datediff",
+      "pattern": "DATEDIFF\\s*\\(",
+      "type": "regex",
+      "description": "Vertica DATEDIFF (use DATE_DIFF in Trino)",
+      "severity": "error",
+      "fix_hint": "Replace DATEDIFF(unit, start, end) with DATE_DIFF(unit, start, end)"
+    },
+    {
+      "id": "using_parameters",
+      "pattern": "USING\\s+PARAMETERS",
+      "type": "regex",
+      "description": "Vertica USING PARAMETERS clause",
+      "severity": "error",
+      "fix_hint": "Remove USING PARAMETERS clause - not supported in Trino"
+    },
+    {
+      "id": "group_concat",
+      "pattern": "GROUP_CONCAT\\s*\\(",
+      "type": "regex",
+      "description": "Vertica GROUP_CONCAT (use ARRAY_JOIN in Trino)",
+      "severity": "error",
+      "fix_hint": "Replace GROUP_CONCAT(col) with ARRAY_JOIN(ARRAY_AGG(col), separator)"
+    },
+    {
+      "id": "offset_rows",
+      "pattern": "OFFSET\\s+\\d+\\s+ROWS?",
+      "type": "regex",
+      "description": "OFFSET ... ROWS syntax (Vertica specific, use OFFSET ... in Trino)",
+      "severity": "error",
+      "fix_hint": "Remove ROWS keyword - use OFFSET N only"
+    },
+    {
+      "id": "qualify",
+      "pattern": "QUALIFY\\s+",
+      "type": "regex",
+      "description": "Vertica QUALIFY (use WHERE on window functions in Trino)",
+      "severity": "error",
+      "fix_hint": "Replace QUALIFY with subquery containing WHERE on window function result"
+    },
+    {
+      "id": "delete_statement",
+      "pattern": "^\\s*DELETE\\b",
+      "type": "regex",
+      "description": "Deleting data in Trino is forbidden",
+      "severity": "error",
+      "fix_hint": "Deleting data in Trino is forbidden. Prefer a partition-bounded overwrite strategy instead. Add a session statement only when your local catalog requires one, and keep the INSERT scoped to the affected partition window."
+    },
+    {
+      "id": "numeric_type",
+      "pattern": "\\bNUMERIC\\b(?:\\s*\\([^)]*\\))?",
+      "type": "regex",
+      "description": "NUMERIC type (use DECIMAL in Trino)",
+      "severity": "error",
+      "fix_hint": "Replace NUMERIC or NUMERIC(p,s) with DECIMAL or DECIMAL(p,s)"
+    },
+    {
+      "id": "version_id_forbidden",
+      "pattern": "\\bversion_id\\b",
+      "type": "regex",
+      "description": "version_id must not be present in Trino SQL",
+      "severity": "error",
+      "fix_hint": "Remove version_id from Trino DDL, INSERT column lists, SELECT lists, @store queries, partitioning and filters. "
+    }
+  ],
+  "auto_fix_strategies": {
+    "priority_order": [
+      "remove_hints",
+      "fix_cast_operators",
+      "replace_functions",
+      "fix_data_types",
+      "fix_join_syntax"
+    ],
+    "batch_rules": {
+      "remove_hints": ["/\\*\\+", "\\*/"],
+      "fix_data_types": ["NUMERIC", "DECIMAL"]
+    }
+  }
+}

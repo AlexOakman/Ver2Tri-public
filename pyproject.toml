@@ -1,0 +1,119 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vertica-to-trino-migrator"
+version = "0.1.0"
+description = "SQL Migration Agent Vertica → Trino with DSPy optimization"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "avdubinets"}
+]
+keywords = ["sql", "migration", "vertica", "trino", "dspy", "llm"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+dependencies = [
+    # DSPy - с BootstrapFewShot, cloudpikle обучение было на 3.1.3 версии 
+    "dspy-ai==3.1.3",
+    
+    # Pydantic для конфигурации
+    "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0",
+    "python-dotenv>=1.0.0",
+    
+    # HTTP клиент для LLM вызовов
+    "openai>=1.0.0",
+    "requests>=2.31.0",
+    "httpx>=0.27.0",  # Асинхронные запросы к LLM
+    "beautifulsoup4>=4.12.0",
+    
+    # SQL утилиты
+    "sqlparse==0.5.3",  # 0.5.5 падает на large SQL with token limit guard
+    "sqlfluff>=3.0.0",  # SQL форматтер
+    "trino==0.337.0",  # Trino DB-API client for runtime SQL testing
+
+    # Логирование и утилиты
+    "rich>=13.0.0",  # Красивые логи в терминале
+    "tqdm>=4.65.0",  # Progress bars для компиляции
+    "streamlit>=1.28.0",          # Добавьте минимальную версию
+    "streamlit-autorefresh>=0.0.1",  # Для автообновления dashboard
+]
+
+[project.optional-dependencies]
+dev = [
+    # Тестирование
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.0.0",
+    
+    # Линтинг и форматирование
+    "black>=23.0.0",
+    "isort>=5.12.0",
+    "mypy>=1.0.0",
+    "ruff>=0.1.0",
+    
+    # Типизация
+    "types-requests>=2.31.0",
+    "types-python-dateutil>=2.8.0",
+]
+
+[project.scripts]
+# CLI команды для удобства запуска
+migrate-compile = "dspy_modules.compiler:main"
+migrate = "main:main"  # или "main:scan_and_process" в зависимости от entry point
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["core", "core.*", "dspy_modules", "dspy_modules.*"]
+
+[tool.black]
+line-length = 100
+target-version = ["py310", "py311", "py312"]
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.git
+  | \.venv
+  | \.eggs
+  | \.tox
+  | build
+  | dist
+  | workflow
+  | checkpoint
+  | golden_dataset
+)/
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 100
+skip = ["workflow", "checkpoint", "golden_dataset", ".venv", "build", "dist"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+exclude = ["workflow", "checkpoint", "golden_dataset", ".venv"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+select = ["E", "F", "W", "I", "N", "UP", "B", "C4"]
+ignore = ["E501"]  # Игнорируем длину строк (black контролирует)
+exclude = ["workflow", "checkpoint", "golden_dataset", ".venv", "build", "dist"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
